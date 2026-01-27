@@ -1,0 +1,26 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Task Queue
+celery==5.3.4
+redis==5.0.1
+
+# Database
+sqlalchemy==2.0.23
+
+# Google Cloud Services
+google-cloud-storage==2.14.0
+google-cloud-speech==2.21.0
+google-generativeai==0.3.2
+
+# Configuration
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Media Processing
+yt-dlp==2023.11.16
+
+# Utilities
+python-dotenv==1.0.0

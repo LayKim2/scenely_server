@@ -8,7 +8,20 @@ from sqlalchemy.orm import Session
 
 from app.workers.celery_app import celery_app
 from app.core.db import SessionLocal
-from app.core.models import Job, Result, JobStatus, SourceType
+from app.core.models import (
+    DailyLesson,
+    DailyLessonItemModel,
+    Job,
+    JobResult,
+    JobStatus,
+    MediaSource,
+    MediaSourceKind,
+    Result,
+    SourceType,
+    Transcript,
+    TranscriptSegment,
+    TranscriptWordModel,
+)
 from app.services.ffmpeg_service import (
     extract_audio_from_youtube,
     extract_audio_from_file,
@@ -50,7 +63,12 @@ def process_job(self, job_id: str):
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
             raise ValueError(f"Job not found: {job_id}")
-        
+
+        # Eager-load media source if present
+        media_source: MediaSource = None
+        if job.media_source_id:
+            media_source = db.query(MediaSource).filter(MediaSource.id == job.media_source_id).first()
+
         # Initialize services
         gcs_service = GCSService()
         stt_service = STTService()
@@ -65,22 +83,37 @@ def process_job(self, job_id: str):
         # Step 2: Acquire Input
         logger.info(f"Processing job {job_id}: Acquiring input")
         temp_audio_path = f"/tmp/{job_id}.flac"
-        
-        if job.source_type == SourceType.YOUTUBE:
-            if not job.youtube_url:
-                raise ValueError("YouTube URL is required for youtube source type")
-            extract_audio_from_youtube(job.youtube_url, temp_audio_path)
-        elif job.source_type == SourceType.UPLOAD:
-            if not job.upload_id:
-                raise ValueError("Upload ID is required for upload source type")
-            # Download from GCS if needed
-            upload_path = f"/tmp/upload_{job_id}"
-            gcs_upload_uri = f"gs://{settings.GCS_BUCKET_TMP_AUDIO}/uploads/{job.upload_id}"
-            gcs_service.download_file(gcs_upload_uri, upload_path)
-            extract_audio_from_file(upload_path, temp_audio_path)
-            cleanup_ffmpeg_file(upload_path)
+
+        # Prefer new media_source-based flow; fall back to legacy fields if absent.
+        if media_source:
+            if media_source.source_kind == MediaSourceKind.YOUTUBE:
+                if not media_source.youtube_url:
+                    raise ValueError("YouTube URL is required for YOUTUBE media source")
+                extract_audio_from_youtube(media_source.youtube_url, temp_audio_path)
+            elif media_source.source_kind == MediaSourceKind.FILE:
+                if not media_source.storage_path:
+                    raise ValueError("storage_path is required for FILE media source")
+                upload_path = f"/tmp/upload_{job_id}"
+                gcs_service.download_file(media_source.storage_path, upload_path)
+                extract_audio_from_file(upload_path, temp_audio_path)
+                cleanup_ffmpeg_file(upload_path)
+            else:
+                raise ValueError(f"Unknown media source kind: {media_source.source_kind}")
         else:
-            raise ValueError(f"Unknown source type: {job.source_type}")
+            if job.source_type == SourceType.YOUTUBE:
+                if not job.youtube_url:
+                    raise ValueError("YouTube URL is required for youtube source type")
+                extract_audio_from_youtube(job.youtube_url, temp_audio_path)
+            elif job.source_type == SourceType.UPLOAD:
+                if not job.upload_id:
+                    raise ValueError("Upload ID is required for upload source type")
+                upload_path = f"/tmp/upload_{job_id}"
+                gcs_upload_uri = f"gs://{settings.GCS_BUCKET_TMP_AUDIO}/uploads/{job.upload_id}"
+                gcs_service.download_file(gcs_upload_uri, upload_path)
+                extract_audio_from_file(upload_path, temp_audio_path)
+                cleanup_ffmpeg_file(upload_path)
+            else:
+                raise ValueError(f"Unknown source type: {job.source_type}")
         
         # Step 3: FFmpeg → temp audio (already done above)
         logger.info(f"Processing job {job_id}: Audio extracted")
@@ -109,10 +142,42 @@ def process_job(self, job_id: str):
         
         stt_result = stt_service.wait_for_completion(operation_name)
         words = stt_result["words"]
-        
+        transcript_text = stt_result.get("transcript", "")
+
         # Step 6: Build transcript segments
         logger.info(f"Processing job {job_id}: Building segments")
         segments = words_to_segments(words)
+
+        # Persist transcript + segments + words
+        transcript = Transcript(
+            job_id=job_id,
+            language=job.target_lang or "en-US",
+            full_text=transcript_text,
+        )
+        db.add(transcript)
+        db.flush()
+
+        for idx, seg in enumerate(segments):
+            db.add(
+                TranscriptSegment(
+                    transcript_id=transcript.id,
+                    idx=idx,
+                    start_sec=seg["start"],
+                    end_sec=seg["end"],
+                    text=seg["text"],
+                )
+            )
+
+        for idx, w in enumerate(words):
+            db.add(
+                TranscriptWordModel(
+                    transcript_id=transcript.id,
+                    idx=idx,
+                    start_sec=w["startSeconds"],
+                    end_sec=w["endSeconds"],
+                    word=w["word"],
+                )
+            )
         
         # Step 7: Gemini Analysis
         logger.info(f"Processing job {job_id}: Running Gemini analysis")
@@ -122,15 +187,49 @@ def process_job(self, job_id: str):
         
         daily_lesson = gemini_service.analyze_transcript(segments)
         
-        # Step 8: Persist result
+        # Step 8: Persist result (raw JSON + normalized daily lessons)
         logger.info(f"Processing job {job_id}: Persisting result")
-        result = Result(
+
+        # Legacy Result for backward compatibility
+        legacy_result = Result(
             job_id=job_id,
             daily_lesson_json=json.dumps(daily_lesson, ensure_ascii=False),
-            transcript_words_json=json.dumps(words, ensure_ascii=False)
+            transcript_words_json=json.dumps(words, ensure_ascii=False),
         )
-        db.add(result)
-        
+        db.add(legacy_result)
+
+        # New JobResult meta
+        meta = JobResult(
+            job_id=job_id,
+            result_type="DAILY_LESSON_V1",
+            raw_daily_json=json.dumps(daily_lesson, ensure_ascii=False),
+            raw_transcript_json=json.dumps(words, ensure_ascii=False),
+        )
+        db.add(meta)
+
+        # Normalized daily lessons
+        for idx, item in enumerate(daily_lesson):
+            lesson = DailyLesson(
+                job_id=job_id,
+                idx=idx,
+                start_sec=item.get("startSec", 0.0),
+                end_sec=item.get("endSec", 0.0),
+                sentence=item.get("sentence", ""),
+            )
+            db.add(lesson)
+            db.flush()
+
+            for jdx, vocab in enumerate(item.get("items", []) or []):
+                db.add(
+                    DailyLessonItemModel(
+                        daily_lesson_id=lesson.id,
+                        idx=jdx,
+                        term=vocab.get("term", ""),
+                        meaning_ko=vocab.get("meaningKo", ""),
+                        example_en=vocab.get("exampleEn", ""),
+                    )
+                )
+
         job.status = JobStatus.COMPLETED
         job.progress = 1.0
         db.commit()

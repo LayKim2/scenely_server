@@ -24,3 +24,5 @@ yt-dlp==2023.11.16
 
 # Utilities
 python-dotenv==1.0.0
+PyJWT==2.8.0
+httpx==0.26.0

@@ -6,23 +6,35 @@ from datetime import datetime
 
 
 class JobRequest(BaseModel):
-    """Request schema for creating a new job"""
-    sourceType: str = Field(..., description="Source type: 'upload' or 'youtube'")
-    uploadId: Optional[str] = Field(None, description="Upload ID if sourceType is 'upload'")
-    youtubeUrl: Optional[str] = Field(None, description="YouTube URL if sourceType is 'youtube'")
-    targetLang: str = Field(default="en", description="Target language code")
+    """Request schema for creating a new job."""
+
+    mediaSourceId: str = Field(..., description="ID of media source to process")
+    jobType: str = Field(default="DAILY_LESSON", description="Job type (e.g. DAILY_LESSON)")
+    targetLang: str = Field(default="en-US", description="Target language code for STT")
 
 
 class JobResponse(BaseModel):
-    """Response schema for job creation"""
+    """Response schema for job creation."""
+
     jobId: str
 
 
 class JobStatusResponse(BaseModel):
-    """Response schema for job status"""
+    """Response schema for job status."""
+
     status: str
     progress: float = Field(..., ge=0.0, le=1.0)
     message: Optional[str] = None
+
+
+class JobSummary(BaseModel):
+    """Summary of a job for listing."""
+
+    id: str
+    jobType: str
+    status: str
+    progress: float
+    createdAt: datetime
 
 
 class TranscriptWord(BaseModel):

@@ -31,6 +31,7 @@ services:
 
   api:
     build: .
+    env_file: .env
     ports:
       - "8000:8000"
     environment:
@@ -42,8 +43,10 @@ services:
       - S3_BUCKET=${S3_BUCKET}
       - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/scenely-gcp-key.json
     volumes:
       - ./:/app
+      - ./app/scenely-gcp-key.json:/app/scenely-gcp-key.json:ro
       - /tmp:/tmp
     depends_on:
       redis:
@@ -54,6 +57,7 @@ services:
 
   worker:
     build: .
+    env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://scenely:scenely@db:5432/scenely
@@ -63,8 +67,10 @@ services:
       - S3_BUCKET=${S3_BUCKET}
       - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/scenely-gcp-key.json
     volumes:
       - ./:/app
+      - ./app/scenely-gcp-key.json:/app/scenely-gcp-key.json:ro
       - /tmp:/tmp
     depends_on:
       redis:

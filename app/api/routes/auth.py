@@ -21,10 +21,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class KakaoAuthRequest(BaseModel):
-    """Request body for Kakao auth exchange."""
+    """Request body for Kakao auth exchange (SDK 방식: code만 전달)."""
 
     code: str
-    redirectUri: Optional[str] = None
 
 
 class AuthUserResponse(BaseModel):
@@ -62,9 +61,11 @@ def _get_or_create_user_from_kakao(
 
     if identity:
         user = identity.user
-        if nickname:
+        if email is not None:
+            user.email = email
+        if nickname is not None:
             user.nickname = nickname
-        if profile_image_url:
+        if profile_image_url is not None:
             user.profile_image = profile_image_url
         user.last_login_at = user.last_login_at or None
         identity.provider_email = email or identity.provider_email
@@ -98,14 +99,15 @@ def _get_or_create_user_from_kakao(
 
 @router.post("/kakao", response_model=AuthResponse)
 async def kakao_login(payload: KakaoAuthRequest, db: Session = Depends(get_db)):
-    """Exchange Kakao auth code for tokens, upsert user, and return JWT."""
-    if not settings.KAKAO_REST_API_KEY or not settings.KAKAO_REDIRECT_URI:
+    """Exchange Kakao auth code for tokens, upsert user, and return JWT (SDK 방식)."""
+    if not settings.KAKAO_REST_API_KEY or not settings.KAKAO_NATIVE_APP_KEY:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Kakao OAuth is not configured",
+            detail="Kakao OAuth is not configured (REST API key + Native App key required)",
         )
 
-    redirect_uri = payload.redirectUri or settings.KAKAO_REDIRECT_URI
+    # SDK 방식: redirect_uri는 kakao{NATIVE_APP_KEY}://oauth 고정 (카카오 디벨로퍼스에 동일 URI 등록 필요)
+    redirect_uri = f"kakao{settings.KAKAO_NATIVE_APP_KEY}://oauth"
 
     # 1) Get access token from Kakao
     token_url = "https://kauth.kakao.com/oauth/token"
@@ -155,6 +157,7 @@ async def kakao_login(payload: KakaoAuthRequest, db: Session = Depends(get_db)):
     kakao_account = me.get("kakao_account", {}) or {}
     profile = kakao_account.get("profile", {}) or {}
 
+    # 카카오 동의 항목: account_email, profile_nickname, profile_image
     email = kakao_account.get("email")
     nickname = profile.get("nickname")
     profile_image_url = profile.get("profile_image_url") or profile.get("thumbnail_image_url")

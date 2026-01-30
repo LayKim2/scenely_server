@@ -1,7 +1,8 @@
 """Lesson/result routes built on normalized tables."""
 
 import logging
-from typing import List
+import json
+from typing import List, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -51,26 +52,25 @@ def get_lesson_for_job(
         )
 
     transcript = db.query(Transcript).filter(Transcript.job_id == job.id).first()
-    if not transcript:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Transcript not found for job",
+    # Transcript might be empty if we only processed segments or had an error, 
+    # but for completed job we expect at least the segments.
+    
+    transcript_words = []
+    if transcript:
+        words_models: List[TranscriptWordModel] = (
+            db.query(TranscriptWordModel)
+            .filter(TranscriptWordModel.transcript_id == transcript.id)
+            .order_by(TranscriptWordModel.idx.asc())
+            .all()
         )
-
-    words_models: List[TranscriptWordModel] = (
-        db.query(TranscriptWordModel)
-        .filter(TranscriptWordModel.transcript_id == transcript.id)
-        .order_by(TranscriptWordModel.idx.asc())
-        .all()
-    )
-    transcript_words = [
-        TranscriptWord(
-            word=w.word,
-            startSeconds=w.start_sec,
-            endSeconds=w.end_sec,
-        )
-        for w in words_models
-    ]
+        transcript_words = [
+            TranscriptWord(
+                word=w.word,
+                startSeconds=w.start_sec,
+                endSeconds=w.end_sec,
+            )
+            for w in words_models
+        ]
 
     lessons: List[DailyLesson] = (
         db.query(DailyLesson)
@@ -97,6 +97,9 @@ def get_lesson_for_job(
                 startSec=lesson.start_sec,
                 endSec=lesson.end_sec,
                 sentence=lesson.sentence,
+                reason=lesson.reason,
+                suggestedActivity=lesson.suggested_activity,
+                clipAudioUrl=lesson.clip_audio_url,
                 items=[
                     {
                         "term": i.term,
@@ -108,7 +111,17 @@ def get_lesson_for_job(
             )
         )
 
+    # Get analysis from JobResult
+    job_result = db.query(JobResult).filter(JobResult.job_id == job.id).first()
+    analysis = None
+    if job_result and job_result.analysis:
+        try:
+            analysis = json.loads(job_result.analysis)
+        except:
+            analysis = job_result.analysis
+
     return JobResultResponse(
+        analysis=analysis,
         dailyLesson=daily_lesson_items,
         transcriptWords=transcript_words,
     )

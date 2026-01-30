@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from app.services.gcs_service import GCSService
+from app.services.s3_service import S3Service
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ def create_presigned_upload():
     """
     try:
         upload_id = str(uuid.uuid4())
-        gcs_service = GCSService()
-        upload_url = gcs_service.generate_presigned_url(upload_id)
+        s3_service = S3Service()
+        upload_url = s3_service.generate_presigned_url(upload_id)
         
         logger.info(f"Generated presigned URL for upload: {upload_id}")
         

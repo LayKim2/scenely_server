@@ -9,11 +9,14 @@ redis==5.0.1
 
 # Database
 sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
 
-# Google Cloud Services
-google-cloud-storage==2.14.0
-google-cloud-speech==2.21.0
+# AWS (S3 + Transcribe)
+boto3==1.34.0
+
+# Gemini (Google)
 google-generativeai==0.3.2
+google-cloud-speech==2.23.0
 
 # Configuration
 pydantic==2.5.0

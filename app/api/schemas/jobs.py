@@ -1,7 +1,7 @@
 """Pydantic schemas for job-related API requests and responses"""
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 
 
@@ -56,10 +56,14 @@ class DailyLessonItem(BaseModel):
     startSec: float
     endSec: float
     sentence: str
+    reason: Optional[str] = None
+    suggestedActivity: Optional[str] = None
+    clipAudioUrl: Optional[str] = None
     items: List[dict] = Field(..., description="List of terms with meaningKo and exampleEn")
 
 
 class JobResultResponse(BaseModel):
     """Response schema for job result"""
+    analysis: Optional[Any] = None
     dailyLesson: List[DailyLessonItem]
     transcriptWords: Optional[List[TranscriptWord]] = None

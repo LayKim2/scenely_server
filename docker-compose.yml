@@ -36,9 +36,12 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://scenely:scenely@db:5432/scenely
-      - GCS_BUCKET_TMP_AUDIO=${GCS_BUCKET_TMP_AUDIO}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_BUCKET=${S3_BUCKET}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
     volumes:
       - ./:/app
       - /tmp:/tmp
@@ -54,9 +57,12 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://scenely:scenely@db:5432/scenely
-      - GCS_BUCKET_TMP_AUDIO=${GCS_BUCKET_TMP_AUDIO}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_BUCKET=${S3_BUCKET}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
     volumes:
       - ./:/app
       - /tmp:/tmp

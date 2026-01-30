@@ -119,6 +119,59 @@ def convert_audio_to_flac(input_path: str, output_path: str) -> None:
         raise RuntimeError(f"FFmpeg conversion failed: {e.stderr}")
 
 
+def cut_audio_segment(
+    input_path: str, 
+    output_path: str, 
+    start_sec: float, 
+    end_sec: float,
+    format: str = "flac"
+) -> str:
+    """
+    Cut a segment from audio file.
+    
+    Args:
+        input_path: Path to input audio file
+        output_path: Path to output file
+        start_sec: Start time in seconds
+        end_sec: End time in seconds
+        format: Output format (flac or mp3)
+        
+    Returns:
+        Path to the output file
+    """
+    duration = end_sec - start_sec
+    
+    cmd = [
+        'ffmpeg',
+        '-ss', str(start_sec),
+        '-t', str(duration),
+        '-i', input_path,
+        '-y'
+    ]
+    
+    if format == "flac":
+        cmd.extend([
+            '-ac', '1',
+            '-ar', '16000',
+            '-c:a', 'flac',
+        ])
+    elif format == "mp3":
+        cmd.extend([
+            '-c:a', 'libmp3lame',
+            '-q:a', '2',  # High quality
+        ])
+    
+    cmd.append(output_path)
+    
+    try:
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        logger.info(f"Segment cut successfully: {output_path} ({start_sec}s - {end_sec}s)")
+        return output_path
+    except subprocess.CalledProcessError as e:
+        logger.error(f"FFmpeg error cutting segment: {e.stderr}")
+        raise RuntimeError(f"FFmpeg segment cut failed: {e.stderr}")
+
+
 def cleanup_file(file_path: str) -> None:
     """Clean up a file if it exists"""
     try:

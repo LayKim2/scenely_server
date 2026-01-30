@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.models import MediaSource, MediaSourceKind, User
-from app.services.gcs_service import GCSService
+from app.services.s3_service import S3Service
 from app.config import settings
 
 
@@ -58,10 +58,10 @@ def create_presigned_upload(
     """
     try:
         upload_id = str(uuid.uuid4())
-        gcs_service = GCSService()
-        upload_url = gcs_service.generate_presigned_url(upload_id)
+        s3_service = S3Service()
+        upload_url = s3_service.generate_presigned_url(upload_id)
 
-        storage_path = f"gs://{settings.GCS_BUCKET_TMP_AUDIO}/uploads/{upload_id}"
+        storage_path = f"s3://{settings.S3_BUCKET}/uploads/{upload_id}"
 
         media_source = MediaSource(
             user_id=current_user.id,

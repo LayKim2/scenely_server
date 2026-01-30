@@ -23,4 +23,7 @@ class DailyLessonItem(BaseModel):
     startSec: float
     endSec: float
     sentence: str
+    reason: Optional[str] = None
+    suggestedActivity: Optional[str] = None
+    clipAudioUrl: Optional[str] = None
     items: List[dict] = Field(..., description="List of terms with meaningKo and exampleEn")

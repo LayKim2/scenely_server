@@ -158,6 +158,7 @@ class JobResult(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     job_id = Column(String, ForeignKey("jobs.id"), unique=True, nullable=False)
     result_type = Column(String, nullable=False, default="DAILY_LESSON_V1")
+    analysis = Column(Text, nullable=True)  # Overall analysis/guide from Gemini
     raw_daily_json = Column(Text, nullable=True)
     raw_transcript_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -222,6 +223,9 @@ class DailyLesson(Base):
     start_sec = Column(Float, nullable=False)
     end_sec = Column(Float, nullable=False)
     sentence = Column(Text, nullable=False)
+    reason = Column(Text, nullable=True)  # Gemini's reason for selection
+    suggested_activity = Column(String, nullable=True)  # e.g. "Shadowing"
+    clip_audio_url = Column(String, nullable=True)  # S3 URL for this segment's mp3
     created_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("Job")

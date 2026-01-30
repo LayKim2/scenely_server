@@ -15,8 +15,91 @@ class GeminiService:
     
     def __init__(self):
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('gemini-3-flash')
     
+    def analyze_media_and_select_segments(self, local_audio_path: str) -> Dict[str, Any]:
+        """
+        Upload audio to Gemini and get learning guide + selected segments.
+        
+        Returns:
+            {
+                "analysis": "...",
+                "segments": [
+                    { "startSec": float, "endSec": float, "reason": "...", "suggestedActivity": "..." }
+                ]
+            }
+        """
+        try:
+            logger.info(f"Uploading audio to Gemini File API: {local_audio_path}")
+            audio_file = genai.upload_file(path=local_audio_path, mime_type="audio/flac")
+            
+            prompt = """# Role
+                    너는 전 세계 언어 학습자를 위한 최고의 외국어 교육 전문가이자 영상 분석가야.
+                    너의 임무는 제공된 영상을 분석하여 학습자가 '반복 청취 및 쉐도잉'하기에 가장 적합한 핵심 구간들을 선정하고, 그 이유와 대사를 정확히 추출하는 것이다.
+
+                    # Task
+                    영상을 시청하고 다음 단계를 수행하라:
+                    1. 영상의 전체적인 주제, 난이도(CEFR 레벨 기준), 그리고 어떤 학습 상황(비즈니스, 일상, 여행 등)인지 요약하라.
+                    2. 학습자가 실제로 '소리 내어 따라 읽기(Shadowing)' 좋고, 실생활 활용도가 높은 '베스트 학습 구간'을 3~5개 선정하라.
+                    3. 각 선정된 구간에 대해 시작/종료 타임스탬프, 추천 이유, 그리고 정확한 대사를 제공하라.
+
+                    # Selection Criteria (구간 선정 기준)
+                    - 화자의 발음이 명확하고 배경 소음이 적은 구간.
+                    - 실생활에서 자주 쓰이는 구어체 표현이나 핵심 숙어가 포함된 구간.
+                    - 너무 짧거나 너무 길지 않은(대략 10초~30초) 호흡의 문장 단위 구간.
+
+                    # Output Format (MUST BE JSON)
+                    반드시 아래 구조의 JSON 형식으로만 응답하라. 다른 설명 문구는 포함하지 마라.
+
+                    {
+                    "analysis": {
+                        "summary": "영상 전체 주제 요약 (한국어)",
+                        "difficulty": "CEFR 레벨 (예: A2, B1, C1 등)",
+                        "situation": "학습 상황 (예: 비즈니스, 일상, 여행 등)"
+                    },
+                    "segments": [
+                        {
+                        "startSec": 시작 시간 (float, 초 단위),
+                        "endSec": 종료 시간 (float, 초 단위),
+                        "reason": "선정 이유 (한국어)",
+                        "sentence": "해당 구간의 정확한 영어 대사",
+                        "items": [
+                            {
+                            "term": "주요 단어/숙어",
+                            "meaningKo": "한국어 뜻",
+                            "exampleEn": "해당 표현이 들어간 새로운 예문"
+                            }
+                        ]
+                        }
+                    ]
+                    }
+                    """
+            logger.info("Calling Gemini 3 for media analysis")
+            response = self.model.generate_content([prompt, audio_file])
+            
+            response_text = response.text.strip()
+            
+            # Remove markdown code blocks
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+            
+            result = json.loads(response_text)
+            
+            # Basic validation
+            if "analysis" not in result or "segments" not in result:
+                raise ValueError("Incomplete Gemini response")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in Gemini media analysis: {e}")
+            raise
+
     def analyze_transcript(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Analyze transcript segments and generate daily lesson content.

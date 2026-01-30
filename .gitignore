@@ -43,3 +43,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Google Cloud
+app/scenely-gcp-key.json

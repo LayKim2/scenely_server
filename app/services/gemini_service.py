@@ -33,7 +33,10 @@ class GeminiService:
         """
         try:
             logger.info("Uploading audio to Gemini File API: %s", local_audio_path)
-            audio_file = self.client.files.upload(file=local_audio_path)
+            audio_file = self.client.files.upload(
+                file=local_audio_path,
+                mime_type="audio/flac",
+            )
 
             prompt = """# Role
                     너는 전 세계 언어 학습자를 위한 최고의 외국어 교육 전문가이자 영상 분석가야.

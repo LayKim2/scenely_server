@@ -23,6 +23,13 @@ class GeminiService:
             api_key=settings.GEMINI_API_KEY,
             http_options=types.HttpOptions(api_version="v1alpha"),
         )
+        try:
+            logger.info("--- 사용 가능한 모델 목록 ---")
+            for model in self.client.models.list():
+                methods = getattr(model, "supported_generation_methods", None) or []
+                logger.info("Name: %s, Supported Methods: %s", model.name, methods)
+        except Exception as e:
+            logger.warning("리스트 확인 중 에러 발생: %s", e)
 
     def analyze_media_and_select_segments(self, local_audio_path: str) -> Dict[str, Any]:
         """

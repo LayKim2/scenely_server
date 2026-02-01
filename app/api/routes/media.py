@@ -2,8 +2,6 @@
 
 import logging
 import uuid
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -18,14 +16,6 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/media", tags=["media"])
-
-
-class PresignRequest(BaseModel):
-    """Optional metadata for presign."""
-
-    fileName: Optional[str] = None
-    fileSize: Optional[int] = None
-    mimeType: Optional[str] = None
 
 
 class PresignResponse(BaseModel):
@@ -49,12 +39,11 @@ class YoutubeCreateResponse(BaseModel):
 
 @router.post("/presign", response_model=PresignResponse)
 def create_presigned_upload(
-    payload: PresignRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Generate a presigned URL for uploading a video file and create a MediaSource.
+    Generate a presigned URL for upload and create a MediaSource. No request body required.
     """
     try:
         upload_id = str(uuid.uuid4())
@@ -67,9 +56,6 @@ def create_presigned_upload(
             user_id=current_user.id,
             source_kind=MediaSourceKind.FILE,
             storage_path=storage_path,
-            original_name=payload.fileName,
-            size_bytes=payload.fileSize,
-            mime_type=payload.mimeType,
         )
         db.add(media_source)
         db.commit()

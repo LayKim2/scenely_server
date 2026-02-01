@@ -48,10 +48,8 @@ class S3Service:
         except Exception as e:
             logger.warning("Error deleting from S3: %s", e)
 
-    def generate_presigned_url(
-        self, upload_id: str, expiration_minutes: int = 60, content_type: str = "video/*"
-    ) -> str:
-        """Generate presigned URL for PUT upload (client uploads file directly to S3)."""
+    def generate_presigned_url(self, upload_id: str, expiration_minutes: int = 60) -> str:
+        """Generate presigned URL for PUT upload. Content-Type is not signed so client may send any type."""
         try:
             key = f"uploads/{upload_id}"
             url = self.client.generate_presigned_url(
@@ -59,7 +57,6 @@ class S3Service:
                 Params={
                     "Bucket": self.bucket_name,
                     "Key": key,
-                    "ContentType": content_type,
                 },
                 ExpiresIn=expiration_minutes * 60,
             )

@@ -12,8 +12,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # gemini-3.0-flash is available in v1alpha (experimental). v1beta = beta, v1 = stable.
-GEMINI_MODEL = "gemini-3.0-flash"
-
+GEMINI_MODEL = "gemini-3-flash"
 
 class GeminiService:
     """Service for Google Gemini API (google-genai SDK)."""

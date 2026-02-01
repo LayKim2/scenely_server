@@ -5,6 +5,7 @@ import json
 from typing import List, Dict, Any
 
 from google import genai
+from google.genai import types
 
 from app.config import settings
 
@@ -35,7 +36,7 @@ class GeminiService:
             logger.info("Uploading audio to Gemini File API: %s", local_audio_path)
             audio_file = self.client.files.upload(
                 file=local_audio_path,
-                mime_type="audio/flac",
+                config=types.UploadFileConfig(mime_type="audio/flac"),
             )
 
             prompt = """# Role

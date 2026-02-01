@@ -11,14 +11,19 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "models/gemini-3.0-flash"
+# gemini-3.0-flash is available in v1alpha (experimental). v1beta = beta, v1 = stable.
+GEMINI_MODEL = "gemini-3.0-flash"
 
 
 class GeminiService:
     """Service for Google Gemini API (google-genai SDK)."""
 
     def __init__(self):
-        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        # Use v1alpha so gemini-3.0-flash (and other preview models) are available.
+        self.client = genai.Client(
+            api_key=settings.GEMINI_API_KEY,
+            http_options=types.HttpOptions(api_version="v1alpha"),
+        )
 
     def analyze_media_and_select_segments(self, local_audio_path: str) -> Dict[str, Any]:
         """

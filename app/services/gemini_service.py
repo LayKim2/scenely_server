@@ -1,26 +1,28 @@
-"""Service for Google Gemini API operations"""
+"""Service for Google Gemini API operations (google-genai SDK)."""
 
 import logging
 import json
 from typing import List, Dict, Any
-import google.generativeai as genai
+
+from google import genai
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+GEMINI_MODEL = "models/gemini-3.0-flash"
+
 
 class GeminiService:
-    """Service for Google Gemini API"""
-    
+    """Service for Google Gemini API (google-genai SDK)."""
+
     def __init__(self):
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-3-flash')
-    
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
     def analyze_media_and_select_segments(self, local_audio_path: str) -> Dict[str, Any]:
         """
         Upload audio to Gemini and get learning guide + selected segments.
-        
+
         Returns:
             {
                 "analysis": "...",
@@ -30,9 +32,9 @@ class GeminiService:
             }
         """
         try:
-            logger.info(f"Uploading audio to Gemini File API: {local_audio_path}")
-            audio_file = genai.upload_file(path=local_audio_path, mime_type="audio/flac")
-            
+            logger.info("Uploading audio to Gemini File API: %s", local_audio_path)
+            audio_file = self.client.files.upload(file=local_audio_path)
+
             prompt = """# Role
                     너는 전 세계 언어 학습자를 위한 최고의 외국어 교육 전문가이자 영상 분석가야.
                     너의 임무는 제공된 영상을 분석하여 학습자가 '반복 청취 및 쉐도잉'하기에 가장 적합한 핵심 구간들을 선정하고, 그 이유와 대사를 정확히 추출하는 것이다.
@@ -74,11 +76,14 @@ class GeminiService:
                     ]
                     }
                     """
-            logger.info("Calling Gemini 3 for media analysis")
-            response = self.model.generate_content([prompt, audio_file])
-            
+            logger.info("Calling Gemini for media analysis")
+            response = self.client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[prompt, audio_file],
+            )
+
             response_text = response.text.strip()
-            
+
             # Remove markdown code blocks
             if response_text.startswith("```json"):
                 response_text = response_text[7:]
@@ -87,26 +92,26 @@ class GeminiService:
             if response_text.endswith("```"):
                 response_text = response_text[:-3]
             response_text = response_text.strip()
-            
+
             result = json.loads(response_text)
-            
+
             # Basic validation
             if "analysis" not in result or "segments" not in result:
                 raise ValueError("Incomplete Gemini response")
-            
+
             return result
-            
+
         except Exception as e:
-            logger.error(f"Error in Gemini media analysis: {e}")
+            logger.error("Error in Gemini media analysis: %s", e)
             raise
 
     def analyze_transcript(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Analyze transcript segments and generate daily lesson content.
-        
+
         Args:
             segments: List of transcript segments with start, end, text
-            
+
         Returns:
             List of daily lesson items
         """
@@ -114,7 +119,7 @@ class GeminiService:
             # Prepare input JSON
             input_data = {"segments": segments}
             input_json = json.dumps(input_data, indent=2)
-            
+
             # Create prompt
             prompt = f"""Analyze the following transcript segments and create a daily lesson JSON structure.
 
@@ -153,11 +158,14 @@ Output format:
     }}
   ]
 }}"""
-            
+
             # Call Gemini API
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+            )
             response_text = response.text.strip()
-            
+
             # Remove markdown code blocks if present
             if response_text.startswith("```json"):
                 response_text = response_text[7:]
@@ -166,11 +174,11 @@ Output format:
             if response_text.endswith("```"):
                 response_text = response_text[:-3]
             response_text = response_text.strip()
-            
+
             # Parse JSON response
             result = json.loads(response_text)
             daily_lesson = result.get("dailyLesson", [])
-            
+
             # Validate structure
             for item in daily_lesson:
                 if "startSec" not in item or "endSec" not in item:
@@ -179,14 +187,14 @@ Output format:
                     raise ValueError("Missing sentence in daily lesson item")
                 if "items" not in item:
                     item["items"] = []
-            
-            logger.info(f"Generated {len(daily_lesson)} daily lesson items")
+
+            logger.info("Generated %d daily lesson items", len(daily_lesson))
             return daily_lesson
-            
+
         except json.JSONDecodeError as e:
-            logger.error(f"Error parsing Gemini JSON response: {e}")
-            logger.error(f"Response text: {response_text[:500]}")
-            raise ValueError(f"Invalid JSON response from Gemini: {e}")
+            logger.error("Error parsing Gemini JSON response: %s", e)
+            logger.error("Response text: %s", response_text[:500])
+            raise ValueError(f"Invalid JSON response from Gemini: {e}") from e
         except Exception as e:
-            logger.error(f"Error calling Gemini API: {e}")
+            logger.error("Error calling Gemini API: %s", e)
             raise

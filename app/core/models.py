@@ -131,23 +131,7 @@ class Job(Base):
 
     user = relationship("User", back_populates="jobs")
     media_source = relationship("MediaSource", back_populates="jobs")
-    result = relationship("Result", back_populates="job", uselist=False)
     job_result_meta = relationship("JobResult", back_populates="job", uselist=False)
-
-
-class Result(Base):
-    """Legacy result model storing raw JSON strings."""
-
-    __tablename__ = "results"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    job_id = Column(String, ForeignKey("jobs.id"), unique=True, nullable=False)
-    daily_lesson_json = Column(Text, nullable=False)
-    transcript_words_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    job = relationship("Job", back_populates="result")
 
 
 class JobResult(Base):
@@ -178,38 +162,6 @@ class Transcript(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("Job")
-    segments = relationship("TranscriptSegment", back_populates="transcript", cascade="all, delete-orphan")
-    words = relationship("TranscriptWordModel", back_populates="transcript", cascade="all, delete-orphan")
-
-
-class TranscriptSegment(Base):
-    """Sentence-level transcript segments."""
-
-    __tablename__ = "transcript_segments"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    transcript_id = Column(String, ForeignKey("transcripts.id"), nullable=False)
-    idx = Column(Integer, nullable=False)
-    start_sec = Column(Float, nullable=False)
-    end_sec = Column(Float, nullable=False)
-    text = Column(Text, nullable=False)
-
-    transcript = relationship("Transcript", back_populates="segments")
-
-
-class TranscriptWordModel(Base):
-    """Word-level transcript entries."""
-
-    __tablename__ = "transcript_words"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    transcript_id = Column(String, ForeignKey("transcripts.id"), nullable=False)
-    idx = Column(Integer, nullable=False)
-    start_sec = Column(Float, nullable=False)
-    end_sec = Column(Float, nullable=False)
-    word = Column(String, nullable=False)
-
-    transcript = relationship("Transcript", back_populates="words")
 
 
 class DailyLesson(Base):

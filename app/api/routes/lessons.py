@@ -14,11 +14,9 @@ from app.core.models import (
     DailyLessonItemModel,
     Job,
     JobStatus,
-    Transcript,
-    TranscriptWordModel,
     User,
 )
-from app.api.schemas.results import DailyLessonItem, TranscriptWord
+from app.api.schemas.results import DailyLessonItem
 from app.api.schemas.jobs import JobResultResponse
 
 
@@ -50,27 +48,6 @@ def get_lesson_for_job(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Job is not completed. Current status: {job.status.value}",
         )
-
-    transcript = db.query(Transcript).filter(Transcript.job_id == job.id).first()
-    # Transcript might be empty if we only processed segments or had an error, 
-    # but for completed job we expect at least the segments.
-    
-    transcript_words = []
-    if transcript:
-        words_models: List[TranscriptWordModel] = (
-            db.query(TranscriptWordModel)
-            .filter(TranscriptWordModel.transcript_id == transcript.id)
-            .order_by(TranscriptWordModel.idx.asc())
-            .all()
-        )
-        transcript_words = [
-            TranscriptWord(
-                word=w.word,
-                startSeconds=w.start_sec,
-                endSeconds=w.end_sec,
-            )
-            for w in words_models
-        ]
 
     lessons: List[DailyLesson] = (
         db.query(DailyLesson)
@@ -123,6 +100,6 @@ def get_lesson_for_job(
     return JobResultResponse(
         analysis=analysis,
         dailyLesson=daily_lesson_items,
-        transcriptWords=transcript_words,
+        transcriptWords=[],
     )
 

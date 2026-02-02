@@ -16,11 +16,8 @@ from app.core.models import (
     JobStatus,
     MediaSource,
     MediaSourceKind,
-    Result,
     SourceType,
     Transcript,
-    TranscriptSegment,
-    TranscriptWordModel,
 )
 from app.services.ffmpeg_service import (
     extract_audio_from_youtube,
@@ -145,14 +142,6 @@ def process_job(self, job_id: str):
                     meaning_ko=vocab.get("meaningKo", ""),
                     example_en=vocab.get("exampleEn", ""),
                 ))
-
-            db.add(TranscriptSegment(
-                transcript_id=transcript.id,
-                idx=idx,
-                start_sec=start_sec,
-                end_sec=end_sec,
-                text=lesson_sentence,
-            ))
 
         # Step 5: Persist meta
         logger.info("Processing job %s: Finalizing", job_id)

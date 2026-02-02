@@ -17,7 +17,6 @@ from app.core.models import (
     JobType,
     MediaSource,
     Transcript,
-    TranscriptWordModel,
     User,
 )
 from app.api.schemas.jobs import (
@@ -26,11 +25,7 @@ from app.api.schemas.jobs import (
     JobStatusResponse,
     JobSummary,
 )
-from app.api.schemas.results import (
-    DailyLessonItem,
-    TranscriptWord,
-    TranscriptSegment,
-)
+from app.api.schemas.results import DailyLessonItem
 from app.workers.tasks import process_job
 
 
@@ -61,21 +56,6 @@ def _build_job_result_response(job: Job, db: Session):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Transcript not found for job",
         )
-
-    words_models: List[TranscriptWordModel] = (
-        db.query(TranscriptWordModel)
-        .filter(TranscriptWordModel.transcript_id == transcript.id)
-        .order_by(TranscriptWordModel.idx.asc())
-        .all()
-    )
-    transcript_words = [
-        TranscriptWord(
-            word=w.word,
-            startSeconds=w.start_sec,
-            endSeconds=w.end_sec,
-        )
-        for w in words_models
-    ]
 
     lessons: List[DailyLesson] = (
         db.query(DailyLesson)
@@ -118,7 +98,7 @@ def _build_job_result_response(job: Job, db: Session):
 
     return JobResultResponse(
         dailyLesson=daily_lesson_items,
-        transcriptWords=transcript_words,
+        transcriptWords=[],
     )
 
 

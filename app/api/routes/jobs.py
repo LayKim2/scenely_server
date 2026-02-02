@@ -9,14 +9,13 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.models import (
-    DailyLesson,
-    DailyLessonItemModel,
+    AnalysisSegment,
+    AnalysisSegmentVoca,
     Job,
     JobResult,
     JobStatus,
     JobType,
     MediaSource,
-    Transcript,
     User,
 )
 from app.api.schemas.jobs import (
@@ -43,52 +42,52 @@ def _ensure_job_owner(job: Job, current_user: User) -> None:
 
 
 def _build_job_result_response(job: Job, db: Session):
-    """Build dailyLesson + transcriptWords response from normalized tables."""
+    """Build dailyLesson + transcriptWords response from job_result and analysis_segments."""
     if job.status != JobStatus.COMPLETED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Job is not completed. Current status: {job.status.value}",
         )
 
-    transcript = db.query(Transcript).filter(Transcript.job_id == job.id).first()
-    if not transcript:
+    job_result = db.query(JobResult).filter(JobResult.job_id == job.id).first()
+    if not job_result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Transcript not found for job",
+            detail="Job result not found for job",
         )
 
-    lessons: List[DailyLesson] = (
-        db.query(DailyLesson)
-        .filter(DailyLesson.job_id == job.id)
-        .order_by(DailyLesson.idx.asc())
+    segments: List[AnalysisSegment] = (
+        db.query(AnalysisSegment)
+        .filter(AnalysisSegment.job_id == job.id)
+        .order_by(AnalysisSegment.idx.asc())
         .all()
     )
-    if not lessons:
+    if not segments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Daily lesson not found for job",
+            detail="Analysis segments not found for job",
         )
 
     daily_lesson_items = []
-    for lesson in lessons:
-        items: List[DailyLessonItemModel] = (
-            db.query(DailyLessonItemModel)
-            .filter(DailyLessonItemModel.daily_lesson_id == lesson.id)
-            .order_by(DailyLessonItemModel.idx.asc())
+    for segment in segments:
+        voca_list: List[AnalysisSegmentVoca] = (
+            db.query(AnalysisSegmentVoca)
+            .filter(AnalysisSegmentVoca.analysis_segment_id == segment.id)
+            .order_by(AnalysisSegmentVoca.idx.asc())
             .all()
         )
         daily_lesson_items.append(
             DailyLessonItem(
-                startSec=lesson.start_sec,
-                endSec=lesson.end_sec,
-                sentence=lesson.sentence,
+                startSec=segment.start_sec,
+                endSec=segment.end_sec,
+                sentence=segment.sentence,
                 items=[
                     {
-                        "term": i.term,
-                        "meaningKo": i.meaning_ko,
-                        "exampleEn": i.example_en,
+                        "term": v.term,
+                        "meaningKo": v.meaning_ko,
+                        "exampleEn": v.example_en,
                     }
-                    for i in items
+                    for v in voca_list
                 ],
             )
         )

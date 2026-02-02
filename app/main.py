@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.db import init_db
-from app.api.routes import auth, jobs, uploads, media, lessons
+from app.api.routes import auth, jobs, media, lessons
 
 # Configure logging
 logging.basicConfig(
@@ -36,7 +36,6 @@ app.include_router(auth.router)
 app.include_router(media.router)
 app.include_router(jobs.router)
 app.include_router(lessons.router)
-app.include_router(uploads.router)
 
 
 @app.on_event("startup")

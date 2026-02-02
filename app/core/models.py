@@ -133,39 +133,27 @@ class Job(Base):
 
 
 class JobResult(Base):
-    """Job result metadata + raw JSON, for new pipeline."""
+    """Job result: analysis fields (summary/difficulty/situation), raw daily JSON, full text."""
 
     __tablename__ = "job_results"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     job_id = Column(String, ForeignKey("jobs.id"), unique=True, nullable=False)
     result_type = Column(String, nullable=False, default="DAILY_LESSON_V1")
-    analysis = Column(Text, nullable=True)  # Overall analysis/guide from Gemini
-    raw_daily_json = Column(Text, nullable=True)
-    raw_transcript_json = Column(Text, nullable=True)
+    language = Column(String, nullable=True)
+    full_text = Column(Text, nullable=True)  # Concatenated transcript text
+    summary = Column(Text, nullable=True)  # From Gemini analysis
+    difficulty = Column(String, nullable=True)  # e.g. A2, B1
+    situation = Column(String, nullable=True)  # e.g. 비즈니스, 일상
     created_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("Job", back_populates="job_result_meta")
 
 
-class Transcript(Base):
-    """Full transcript per job."""
+class AnalysisSegment(Base):
+    """Analysis segment per job: study-friendly segment from Gemini."""
 
-    __tablename__ = "transcripts"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
-    language = Column(String, nullable=True)
-    full_text = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    job = relationship("Job")
-
-
-class DailyLesson(Base):
-    """Daily lesson unit per job."""
-
-    __tablename__ = "daily_lessons"
+    __tablename__ = "analysis_segments"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
@@ -179,19 +167,19 @@ class DailyLesson(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("Job")
-    items = relationship("DailyLessonItemModel", back_populates="lesson", cascade="all, delete-orphan")
+    voca = relationship("AnalysisSegmentVoca", back_populates="segment", cascade="all, delete-orphan")
 
 
-class DailyLessonItemModel(Base):
-    """Vocabulary/phrase items for a daily lesson."""
+class AnalysisSegmentVoca(Base):
+    """Vocabulary/phrase items for an analysis segment."""
 
-    __tablename__ = "daily_lesson_items"
+    __tablename__ = "analysis_segment_voca"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    daily_lesson_id = Column(String, ForeignKey("daily_lessons.id"), nullable=False)
+    analysis_segment_id = Column(String, ForeignKey("analysis_segments.id"), nullable=False)
     idx = Column(Integer, nullable=False)
     term = Column(String, nullable=False)
     meaning_ko = Column(Text, nullable=False)
     example_en = Column(Text, nullable=False)
 
-    lesson = relationship("DailyLesson", back_populates="items")
+    segment = relationship("AnalysisSegment", back_populates="voca")

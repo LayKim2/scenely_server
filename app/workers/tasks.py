@@ -9,15 +9,14 @@ from sqlalchemy.orm import Session
 from app.workers.celery_app import celery_app
 from app.core.db import SessionLocal
 from app.core.models import (
-    DailyLesson,
-    DailyLessonItemModel,
+    AnalysisSegment,
+    AnalysisSegmentVoca,
     Job,
     JobResult,
     JobStatus,
     MediaSource,
     MediaSourceKind,
     SourceType,
-    Transcript,
 )
 from app.services.ffmpeg_service import (
     extract_audio_from_youtube,
@@ -101,9 +100,11 @@ def process_job(self, job_id: str):
         gemini_result = gemini_service.analyze_media_and_select_segments(temp_audio_path)
         logger.info("Gemini response for job %s: %s", job_id, json.dumps(gemini_result, ensure_ascii=False, indent=2))
 
-        analysis_data = gemini_result.get("analysis", {})
+        analysis_data = gemini_result.get("analysis", {}) or {}
         selected_segments = gemini_result.get("segments", [])
-        analysis_text = json.dumps(analysis_data, ensure_ascii=False) if isinstance(analysis_data, dict) else str(analysis_data)
+        summary = analysis_data.get("summary") if isinstance(analysis_data, dict) else None
+        difficulty = analysis_data.get("difficulty") if isinstance(analysis_data, dict) else None
+        situation = analysis_data.get("situation") if isinstance(analysis_data, dict) else None
 
         if not selected_segments:
             logger.warning("Gemini did not select any segments for job %s", job_id)
@@ -114,49 +115,45 @@ def process_job(self, job_id: str):
         job.progress = 0.70
         db.commit()
 
-        transcript = Transcript(
-            job_id=job_id,
-            language=job.target_lang or "en-US",
-            full_text=" ".join(seg.get("sentence", "") for seg in selected_segments),
-        )
-        db.add(transcript)
-        db.flush()
+        full_text = " ".join(seg.get("sentence", "") for seg in selected_segments)
 
         for idx, seg in enumerate(selected_segments):
             start_sec = float(seg.get("startSec", 0))
             end_sec = float(seg.get("endSec", 0))
-            lesson_sentence = seg.get("sentence") or ""
+            segment_sentence = seg.get("sentence") or ""
 
-            lesson = DailyLesson(
+            segment = AnalysisSegment(
                 job_id=job_id,
                 idx=idx,
                 start_sec=start_sec,
                 end_sec=end_sec,
-                sentence=lesson_sentence,
+                sentence=segment_sentence,
                 reason=seg.get("reason"),
                 suggested_activity=seg.get("suggestedActivity"),
             )
-            db.add(lesson)
+            db.add(segment)
             db.flush()
 
             vocab_items = seg.get("items") or []
             for v_idx, vocab in enumerate(vocab_items):
-                db.add(DailyLessonItemModel(
-                    daily_lesson_id=lesson.id,
+                db.add(AnalysisSegmentVoca(
+                    analysis_segment_id=segment.id,
                     idx=v_idx,
                     term=vocab.get("term", ""),
                     meaning_ko=vocab.get("meaningKo", ""),
                     example_en=vocab.get("exampleEn", ""),
                 ))
 
-        # Step 5: Persist meta
+        # Step 5: Persist result (meta + full_text)
         logger.info("Processing job %s: Finalizing", job_id)
         meta = JobResult(
             job_id=job_id,
             result_type="DAILY_LESSON_V2",
-            analysis=analysis_text,
-            raw_daily_json=json.dumps(selected_segments, ensure_ascii=False),
-            raw_transcript_json=None,
+            language=job.target_lang or "en-US",
+            full_text=full_text,
+            summary=summary,
+            difficulty=difficulty,
+            situation=situation,
         )
         db.add(meta)
 

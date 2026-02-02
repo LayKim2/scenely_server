@@ -1,7 +1,6 @@
 """Lesson/result routes built on normalized tables."""
 
 import logging
-import json
 from typing import List, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,9 +9,10 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.models import (
-    DailyLesson,
-    DailyLessonItemModel,
+    AnalysisSegment,
+    AnalysisSegmentVoca,
     Job,
+    JobResult,
     JobStatus,
     User,
 )
@@ -49,53 +49,54 @@ def get_lesson_for_job(
             detail=f"Job is not completed. Current status: {job.status.value}",
         )
 
-    lessons: List[DailyLesson] = (
-        db.query(DailyLesson)
-        .filter(DailyLesson.job_id == job.id)
-        .order_by(DailyLesson.idx.asc())
+    segments: List[AnalysisSegment] = (
+        db.query(AnalysisSegment)
+        .filter(AnalysisSegment.job_id == job.id)
+        .order_by(AnalysisSegment.idx.asc())
         .all()
     )
-    if not lessons:
+    if not segments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Daily lesson not found for job",
+            detail="Analysis segments not found for job",
         )
 
     daily_lesson_items = []
-    for lesson in lessons:
-        items: List[DailyLessonItemModel] = (
-            db.query(DailyLessonItemModel)
-            .filter(DailyLessonItemModel.daily_lesson_id == lesson.id)
-            .order_by(DailyLessonItemModel.idx.asc())
+    for segment in segments:
+        voca_list: List[AnalysisSegmentVoca] = (
+            db.query(AnalysisSegmentVoca)
+            .filter(AnalysisSegmentVoca.analysis_segment_id == segment.id)
+            .order_by(AnalysisSegmentVoca.idx.asc())
             .all()
         )
         daily_lesson_items.append(
             DailyLessonItem(
-                startSec=lesson.start_sec,
-                endSec=lesson.end_sec,
-                sentence=lesson.sentence,
-                reason=lesson.reason,
-                suggestedActivity=lesson.suggested_activity,
-                clipAudioUrl=lesson.clip_audio_url,
+                startSec=segment.start_sec,
+                endSec=segment.end_sec,
+                sentence=segment.sentence,
+                reason=segment.reason,
+                suggestedActivity=segment.suggested_activity,
+                clipAudioUrl=segment.clip_audio_url,
                 items=[
                     {
-                        "term": i.term,
-                        "meaningKo": i.meaning_ko,
-                        "exampleEn": i.example_en,
+                        "term": v.term,
+                        "meaningKo": v.meaning_ko,
+                        "exampleEn": v.example_en,
                     }
-                    for i in items
+                    for v in voca_list
                 ],
             )
         )
 
-    # Get analysis from JobResult
+    # Build analysis from JobResult columns
     job_result = db.query(JobResult).filter(JobResult.job_id == job.id).first()
     analysis = None
-    if job_result and job_result.analysis:
-        try:
-            analysis = json.loads(job_result.analysis)
-        except:
-            analysis = job_result.analysis
+    if job_result and (job_result.summary or job_result.difficulty or job_result.situation):
+        analysis = {
+            "summary": job_result.summary,
+            "difficulty": job_result.difficulty,
+            "situation": job_result.situation,
+        }
 
     return JobResultResponse(
         analysis=analysis,

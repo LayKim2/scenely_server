@@ -87,18 +87,16 @@ class UserIdentity(Base):
 
 
 class MediaSource(Base):
-    """Input media source (YouTube URL, uploaded file, etc.)."""
+    """Input media source. type=FILE → storage_path (S3), type=YOUTUBE → youtube_url."""
 
     __tablename__ = "media_sources"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    source_kind = Column(SQLEnum(MediaSourceKind), nullable=False)
-    youtube_url = Column(String, nullable=True)
-    storage_path = Column(String, nullable=True)
-    original_name = Column(String, nullable=True)
+    source_type = Column("type", SQLEnum(MediaSourceKind), nullable=False)
+    youtube_url = Column(String, nullable=True)  # when source_type=YOUTUBE
+    storage_path = Column(String, nullable=True)  # when source_type=FILE
     size_bytes = Column(Integer, nullable=True)
-    mime_type = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")

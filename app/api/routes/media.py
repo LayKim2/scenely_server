@@ -1,9 +1,11 @@
-"""Media routes for presigned uploads and YouTube sources."""
+"""Media routes for presigned uploads and media source creation."""
 
 import logging
 import uuid
+from typing import Literal, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -17,89 +19,74 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/media", tags=["media"])
 
+SOURCE_TYPE_FILE = "FILE"
+SOURCE_TYPE_YOUTUBE = "YOUTUBE"
+
+
+class CreateMediaSourceRequest(BaseModel):
+    """Request body: sourceType + youtubeUrl (required when sourceType=YOUTUBE)."""
+
+    sourceType: Literal["FILE", "YOUTUBE"] = Field(
+        default=SOURCE_TYPE_FILE,
+        description="FILE: presign upload. YOUTUBE: provide youtubeUrl.",
+    )
+    youtubeUrl: Optional[str] = Field(default=None, description="Required when sourceType=YOUTUBE.")
+
 
 class PresignResponse(BaseModel):
-    """Response schema for presigned URL generation."""
+    """Response: mediaSourceId always; uploadUrl only when sourceType=FILE."""
 
     mediaSourceId: str
-    uploadUrl: str
-
-
-class YoutubeCreateRequest(BaseModel):
-    """Create a media source from YouTube URL."""
-
-    youtubeUrl: str
-
-
-class YoutubeCreateResponse(BaseModel):
-    """Response for YouTube media source creation."""
-
-    mediaSourceId: str
+    uploadUrl: Optional[str] = None
 
 
 @router.post("/presign", response_model=PresignResponse)
 def create_presigned_upload(
+    body: CreateMediaSourceRequest = CreateMediaSourceRequest(),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Generate a presigned URL for upload and create a MediaSource. No request body required.
+    Create a MediaSource. FILE: generate presigned URL and storage_path. YOUTUBE: store youtubeUrl (no uploadUrl).
     """
     try:
+        if body.sourceType == SOURCE_TYPE_YOUTUBE:
+            if not body.youtubeUrl or not body.youtubeUrl.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"youtubeUrl is required when sourceType is {SOURCE_TYPE_YOUTUBE}",
+                )
+            media_source = MediaSource(
+                user_id=current_user.id,
+                source_type=MediaSourceKind.YOUTUBE,
+                youtube_url=body.youtubeUrl.strip(),
+            )
+            db.add(media_source)
+            db.commit()
+            db.refresh(media_source)
+            logger.info("Created YouTube media_source %s", media_source.id)
+            return PresignResponse(mediaSourceId=media_source.id, uploadUrl=None)
+
+        # FILE: presign + storage_path
         upload_id = str(uuid.uuid4())
         s3_service = S3Service()
         upload_url = s3_service.generate_presigned_url(upload_id)
-
         storage_path = f"s3://{settings.S3_BUCKET}/uploads/{upload_id}"
-
         media_source = MediaSource(
             user_id=current_user.id,
-            source_kind=MediaSourceKind.FILE,
+            source_type=MediaSourceKind.FILE,
             storage_path=storage_path,
         )
         db.add(media_source)
         db.commit()
         db.refresh(media_source)
-
         logger.info("Generated presigned URL for media_source %s", media_source.id)
-
-        return PresignResponse(
-            mediaSourceId=media_source.id,
-            uploadUrl=upload_url,
-        )
+        return PresignResponse(mediaSourceId=media_source.id, uploadUrl=upload_url)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Error generating media presigned URL: %s", e)
+        logger.error("Error creating media source: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate presigned URL",
+            detail="Failed to create media source",
         )
-
-
-@router.post("/youtube", response_model=YoutubeCreateResponse)
-def create_youtube_source(
-    payload: YoutubeCreateRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    Create a MediaSource that points to a YouTube URL.
-    """
-    if not payload.youtubeUrl:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="youtubeUrl is required",
-        )
-
-    media_source = MediaSource(
-        user_id=current_user.id,
-        source_kind=MediaSourceKind.YOUTUBE,
-        youtube_url=payload.youtubeUrl,
-    )
-    db.add(media_source)
-    db.commit()
-    db.refresh(media_source)
-
-    logger.info("Created YouTube media_source %s", media_source.id)
-
-    return YoutubeCreateResponse(mediaSourceId=media_source.id)
-

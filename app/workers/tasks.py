@@ -65,11 +65,17 @@ def process_job(self, job_id: str):
         temp_audio_path = f"/tmp/{job_id}.flac"
 
         if media_source:
-            if media_source.source_kind == MediaSourceKind.YOUTUBE:
+            if media_source.source_type == MediaSourceKind.YOUTUBE:
                 extract_audio_from_youtube(media_source.youtube_url, temp_audio_path)
-            elif media_source.source_kind == MediaSourceKind.FILE:
+                if os.path.exists(temp_audio_path):
+                    media_source.size_bytes = os.path.getsize(temp_audio_path)
+                    db.commit()
+            elif media_source.source_type == MediaSourceKind.FILE:
                 upload_path = f"/tmp/upload_{job_id}"
                 s3_service.download_file(media_source.storage_path, upload_path)
+                if os.path.exists(upload_path):
+                    media_source.size_bytes = os.path.getsize(upload_path)
+                    db.commit()
                 extract_audio_from_file(upload_path, temp_audio_path)
                 cleanup_ffmpeg_file(upload_path)
         else:

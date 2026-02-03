@@ -130,6 +130,7 @@ class Job(Base):
     user = relationship("User", back_populates="jobs")
     media_source = relationship("MediaSource", back_populates="jobs")
     job_result_meta = relationship("JobResult", back_populates="job", uselist=False)
+    script_exports = relationship("ScriptExport", back_populates="job", cascade="all, delete-orphan")
 
 
 class JobResult(Base):
@@ -183,3 +184,19 @@ class AnalysisSegmentVoca(Base):
     example_en = Column(Text, nullable=False)
 
     segment = relationship("AnalysisSegment", back_populates="voca")
+
+
+class ScriptExport(Base):
+    """Word-level script export for a job (STT result)."""
+
+    __tablename__ = "script_exports"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
+    idx = Column(Integer, nullable=False)  # word order
+    word = Column(String, nullable=False)
+    start_sec = Column(Float, nullable=False)
+    end_sec = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    job = relationship("Job")

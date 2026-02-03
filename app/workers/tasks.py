@@ -16,6 +16,7 @@ from app.core.models import (
     JobStatus,
     MediaSource,
     MediaSourceKind,
+    ScriptExport,
     SourceType,
 )
 from app.services.ffmpeg_service import (
@@ -25,6 +26,7 @@ from app.services.ffmpeg_service import (
 )
 from app.services.s3_service import S3Service
 from app.services.gemini_service import GeminiService
+from app.services.google_stt_service import GoogleSTTService
 from app.utils.file_cleanup import cleanup_temp_files
 from app.config import settings
 
@@ -52,6 +54,7 @@ def process_job(self, job_id: str):
 
         s3_service = S3Service()
         gemini_service = GeminiService()
+        stt_service = GoogleSTTService()
 
         # Step 1: Validate
         logger.info("Processing job %s: Validation", job_id)
@@ -91,13 +94,34 @@ def process_job(self, job_id: str):
         job.progress = 0.25
         db.commit()
 
-        # Step 3: Gemini segment analysis (full audio -> segments)
+        # Step 3: STT transcription (audio -> text)
+        logger.info("Processing job %s: STT transcription", job_id)
+        stt_result = stt_service.transcribe_segment(
+            local_path=temp_audio_path,
+            language_code=job.target_lang or "en-US",
+        )
+        transcript_text = stt_result.get("transcript", "") or ""
+        words = stt_result.get("words", []) or []
+
+        # Save word-level script to script_exports
+        for idx, w in enumerate(words):
+            db.add(ScriptExport(
+                job_id=job_id,
+                idx=idx,
+                word=w.get("word", ""),
+                start_sec=float(w.get("startSeconds", 0.0) or 0.0),
+                end_sec=float(w.get("endSeconds", 0.0) or 0.0),
+            ))
+        db.commit()
+        logger.info("Saved %d words to script_exports for job %s", len(words), job_id)
+
+        # Step 4: Gemini segment analysis (transcript -> segments)
         logger.info("Processing job %s: Gemini analysis & selection", job_id)
         job.status = JobStatus.GEMINI_RUNNING
         job.progress = 0.40
         db.commit()
 
-        gemini_result = gemini_service.analyze_media_and_select_segments(temp_audio_path)
+        gemini_result = gemini_service.analyze_media_and_select_segments(transcript_text)
         logger.info("Gemini response for job %s: %s", job_id, json.dumps(gemini_result, ensure_ascii=False, indent=2))
 
         analysis_data = gemini_result.get("analysis", {}) or {}
@@ -109,7 +133,7 @@ def process_job(self, job_id: str):
         if not selected_segments:
             logger.warning("Gemini did not select any segments for job %s", job_id)
 
-        # Step 4: Persist Gemini segments only (no STT, no mp3)
+        # Step 5: Persist Gemini segments only (no mp3)
         logger.info("Processing job %s: Persisting segments", job_id)
         job.status = JobStatus.ASR_RUNNING
         job.progress = 0.70

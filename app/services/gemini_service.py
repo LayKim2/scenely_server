@@ -31,9 +31,9 @@ class GeminiService:
         except Exception as e:
             logger.warning("리스트 확인 중 에러 발생: %s", e)
 
-    def analyze_media_and_select_segments(self, local_audio_path: str) -> Dict[str, Any]:
+    def analyze_media_and_select_segments(self, transcript: str) -> Dict[str, Any]:
         """
-        Upload audio to Gemini and get learning guide + selected segments.
+        Analyze transcript text with Gemini and get learning guide + selected segments.
 
         Returns:
             {
@@ -44,57 +44,67 @@ class GeminiService:
             }
         """
         try:
-            logger.info("Uploading audio to Gemini File API: %s", local_audio_path)
-            audio_file = self.client.files.upload(
-                file=local_audio_path,
-                config=types.UploadFileConfig(mime_type="audio/flac"),
-            )
-
             prompt = """# Role
                     너는 전 세계 언어 학습자를 위한 최고의 외국어 교육 전문가이자 영상 분석가야.
                     너의 임무는 제공된 영상을 분석하여 학습자가 '반복 청취 및 쉐도잉'하기에 가장 적합한 핵심 구간들을 선정하고, 그 이유와 대사를 정확히 추출하는 것이다.
 
-                    # Task
-                    영상을 시청하고 다음 단계를 수행하라:
-                    1. 영상의 전체적인 주제, 난이도(CEFR 레벨 기준), 그리고 어떤 학습 상황(비즈니스, 일상, 여행 등)인지 요약하라.
-                    2. 학습자가 실제로 '소리 내어 따라 읽기(Shadowing)' 좋고, 실생활 활용도가 높은 '베스트 학습 구간'을 3~5개 선정하라.
-                    3. 각 선정된 구간에 대해 시작/종료 타임스탬프, 추천 이유, 그리고 정확한 대사를 제공하라.
+                    # Overall Flow
+                    아래의 **2단계**를 순서대로 수행하라.
+                    1단계에서 영상 전체를 이해하고 요약(analysis)을 만든 뒤,
+                    2단계에서 반드시 그 analysis를 기준으로 학습 구간(segments)을 선택해야 한다.
 
-                    # Selection Criteria (구간 선정 기준)
-                    - 화자의 발음이 명확하고 배경 소음이 적은 구간.
+                    # Step 1: Global Analysis (analysis 필드 생성)
+                    영상을 처음부터 끝까지 보고, 다음 세 가지를 채워라:
+                    - summary: 영상 전체 주제 요약 (한국어, 2~4문장)
+                    - difficulty: 이 영상의 전반적인 난이도 (CEFR 레벨: A1, A2, B1, B2, C1, C2 중 하나)
+                    - situation: 이 영상이 주로 사용될 상황 (예: 비즈니스 회의, 일상 대화, 프레젠테이션, 강의, 뉴스 등)
+
+                    # Step 2: Select Study-Friendly Segments (segments 배열 생성)
+                    1단계에서 만든 analysis.summary / analysis.difficulty / analysis.situation을 기준으로,
+                    학습자가 실제로 '소리 내어 따라 읽기(Shadowing)' 좋고 실생활 활용도가 높은
+                    '베스트 학습 구간'을 3~5개 선정하라.
+
+                    각 segment는 다음 조건을 만족해야 한다:
+                    - 영상의 전체 주제(summary)와 상황(situation)에 잘 부합하는 구간일 것
+                    - difficulty와 일관되게, 학습자에게 적절한 난이도의 표현이 포함될 것
+                    - 화자의 발음이 명확하고, 배경 소음이 과도하지 않을 것
+                    - 너무 짧거나 너무 길지 않은(대략 10초~30초) 문장 단위 구간일 것
+
+                    # Selection Criteria (구간 선정 기준 정리)
                     - 실생활에서 자주 쓰이는 구어체 표현이나 핵심 숙어가 포함된 구간.
-                    - 너무 짧거나 너무 길지 않은(대략 10초~30초) 호흡의 문장 단위 구간.
+                    - 학습자가 나중에 실제로 써먹기 좋은 표현/패턴이 들어 있는 구간.
+                    - shadowing 연습에 적합하도록, 호흡과 리듬이 자연스러운 구간.
 
                     # Output Format (MUST BE JSON)
-                    반드시 아래 구조의 JSON 형식으로만 응답하라. 다른 설명 문구는 포함하지 마라.
+                    반드시 아래 구조의 JSON 형식으로만 응답하라. 다른 설명 문구나 마크다운은 포함하지 마라.
 
                     {
-                    "analysis": {
+                      "analysis": {
                         "summary": "영상 전체 주제 요약 (한국어)",
                         "difficulty": "CEFR 레벨 (예: A2, B1, C1 등)",
                         "situation": "학습 상황 (예: 비즈니스, 일상, 여행 등)"
-                    },
-                    "segments": [
+                      },
+                      "segments": [
                         {
-                        "startSec": 시작 시간 (float, 초 단위),
-                        "endSec": 종료 시간 (float, 초 단위),
-                        "reason": "선정 이유 (한국어)",
-                        "sentence": "해당 구간의 정확한 영어 대사",
-                        "items": [
+                          "startSec": 시작 시간 (float, 초 단위),
+                          "endSec": 종료 시간 (float, 초 단위),
+                          "reason": "이 구간이 학습에 적합한 이유 (한국어)",
+                          "sentence": "해당 구간의 정확한 영어 대사",
+                          "items": [
                             {
-                            "term": "주요 단어/숙어",
-                            "meaningKo": "한국어 뜻",
-                            "exampleEn": "해당 표현이 들어간 새로운 예문"
+                              "term": "주요 단어/숙어",
+                              "meaningKo": "한국어 뜻",
+                              "exampleEn": "해당 표현이 들어간 새로운 예문"
                             }
-                        ]
+                          ]
                         }
-                    ]
+                      ]
                     }
                     """
-            logger.info("Calling Gemini for media analysis")
+            logger.info("Calling Gemini for transcript-based analysis")
             response = self.client.models.generate_content(
                 model=GEMINI_MODEL,
-                contents=[prompt, audio_file],
+                contents=[prompt, transcript],
             )
 
             response_text = response.text.strip()

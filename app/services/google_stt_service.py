@@ -18,7 +18,7 @@ class GoogleSTTService:
 
     def transcribe_segment(self, local_path: str, language_code: str = "en-US") -> Dict[str, Any]:
         """
-        Transcribe a short audio segment from local file.
+        Transcribe audio using LongRunningRecognize (async).
         Returns: { "words": [{ word, startSeconds, endSeconds }], "transcript": "..." }
         """
         try:
@@ -34,11 +34,12 @@ class GoogleSTTService:
                 enable_automatic_punctuation=True,
             )
 
-            logger.info(f"Requesting Google STT for {local_path}")
-            response = self.client.recognize(config=config, audio=audio)
+            logger.info(f"Requesting Google STT (long_running_recognize) for {local_path}")
+            operation = self.client.long_running_recognize(config=config, audio=audio)
+            response = operation.result(timeout=600)  # 10 minutes timeout
 
-            words = []
-            full_transcript = []
+            words: List[Dict[str, Any]] = []
+            full_transcript: List[str] = []
 
             for result in response.results:
                 alternative = result.alternatives[0]

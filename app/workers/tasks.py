@@ -15,7 +15,6 @@ from app.core.models import (
     JobResult,
     JobStatus,
     MediaSource,
-    MediaSourceKind,
     ScriptExport,
     SourceType,
 )
@@ -67,12 +66,8 @@ def process_job(self, job_id: str):
         temp_audio_path = f"/tmp/{job_id}.flac"
 
         if media_source:
-            if media_source.source_type == MediaSourceKind.YOUTUBE:
-                extract_audio_from_youtube(media_source.youtube_url, temp_audio_path)
-                if os.path.exists(temp_audio_path):
-                    media_source.size_bytes = os.path.getsize(temp_audio_path)
-                    db.commit()
-            elif media_source.source_type == MediaSourceKind.FILE:
+            # YouTube flow: audio is uploaded to S3 via presign; we download from storage_path
+            if media_source.storage_path:
                 upload_path = f"/tmp/upload_{job_id}"
                 s3_service.download_file(media_source.storage_path, upload_path)
                 if os.path.exists(upload_path):
@@ -80,6 +75,12 @@ def process_job(self, job_id: str):
                     db.commit()
                 extract_audio_from_file(upload_path, temp_audio_path)
                 cleanup_ffmpeg_file(upload_path)
+            elif media_source.youtube_url:
+                # Legacy: no S3 upload, pull from YouTube directly
+                extract_audio_from_youtube(media_source.youtube_url, temp_audio_path)
+                if os.path.exists(temp_audio_path):
+                    media_source.size_bytes = os.path.getsize(temp_audio_path)
+                    db.commit()
         else:
             if job.source_type == SourceType.YOUTUBE:
                 extract_audio_from_youtube(job.youtube_url, temp_audio_path)

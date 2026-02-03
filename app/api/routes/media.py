@@ -1,8 +1,7 @@
-"""Media routes for presigned uploads and media source creation."""
+"""Media routes: presigned upload for YouTube audio (client uploads extracted audio to S3)."""
 
 import logging
 import uuid
-from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -19,68 +18,53 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/media", tags=["media"])
 
-SOURCE_TYPE_FILE = "FILE"
-SOURCE_TYPE_YOUTUBE = "YOUTUBE"
 
+class PresignRequest(BaseModel):
+    """Request: youtubeUrl only (YouTube case only)."""
 
-class CreateMediaSourceRequest(BaseModel):
-    """Request body: sourceType + youtubeUrl (required when sourceType=YOUTUBE)."""
-
-    sourceType: Literal["FILE", "YOUTUBE"] = Field(
-        default=SOURCE_TYPE_FILE,
-        description="FILE: presign upload. YOUTUBE: provide youtubeUrl.",
-    )
-    youtubeUrl: Optional[str] = Field(default=None, description="Required when sourceType=YOUTUBE.")
+    youtubeUrl: str = Field(..., description="YouTube URL. Client will upload extracted audio to uploadUrl.")
 
 
 class PresignResponse(BaseModel):
-    """Response: mediaSourceId always; uploadUrl only when sourceType=FILE."""
+    """Response: mediaSourceId + presigned uploadUrl for S3."""
 
     mediaSourceId: str
-    uploadUrl: Optional[str] = None
+    uploadUrl: str
 
 
 @router.post("/presign", response_model=PresignResponse)
 def create_presigned_upload(
-    body: CreateMediaSourceRequest = CreateMediaSourceRequest(),
+    body: PresignRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Create a MediaSource. FILE: generate presigned URL and storage_path. YOUTUBE: store youtubeUrl (no uploadUrl).
+    Create a MediaSource for a YouTube URL and return a presigned URL.
+    Client must upload the extracted audio file to uploadUrl (PUT), then create a job with mediaSourceId.
     """
     try:
-        if body.sourceType == SOURCE_TYPE_YOUTUBE:
-            if not body.youtubeUrl or not body.youtubeUrl.strip():
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"youtubeUrl is required when sourceType is {SOURCE_TYPE_YOUTUBE}",
-                )
-            media_source = MediaSource(
-                user_id=current_user.id,
-                source_type=MediaSourceKind.YOUTUBE,
-                youtube_url=body.youtubeUrl.strip(),
+        url = (body.youtubeUrl or "").strip()
+        if not url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="youtubeUrl is required",
             )
-            db.add(media_source)
-            db.commit()
-            db.refresh(media_source)
-            logger.info("Created YouTube media_source %s", media_source.id)
-            return PresignResponse(mediaSourceId=media_source.id, uploadUrl=None)
 
-        # FILE: presign + storage_path
         upload_id = str(uuid.uuid4())
         s3_service = S3Service()
         upload_url = s3_service.generate_presigned_url(upload_id)
         storage_path = f"s3://{settings.S3_BUCKET}/uploads/{upload_id}"
+
         media_source = MediaSource(
             user_id=current_user.id,
-            source_type=MediaSourceKind.FILE,
+            source_type=MediaSourceKind.YOUTUBE,
+            youtube_url=url,
             storage_path=storage_path,
         )
         db.add(media_source)
         db.commit()
         db.refresh(media_source)
-        logger.info("Generated presigned URL for media_source %s", media_source.id)
+        logger.info("Created YouTube media_source %s with presign", media_source.id)
         return PresignResponse(mediaSourceId=media_source.id, uploadUrl=upload_url)
     except HTTPException:
         raise

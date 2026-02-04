@@ -28,8 +28,8 @@ class DeepgramSTTService:
 
     def transcribe_segment(self, local_path: str, language_code: str = "en-US") -> Dict[str, Any]:
         """
-        Transcribe audio file with Nova-2. Returns same shape as Google STT:
-        { "words": [{ word, startSeconds, endSeconds }], "transcript": "..." }
+        Transcribe audio file with Nova-2. Returns:
+        { "transcript": "...", "sentences": [{ startSeconds, endSeconds, text }, ...] }
         """
         if not self.api_key:
             raise RuntimeError("DEEPGRAM_API_KEY is not configured in settings.")
@@ -52,6 +52,7 @@ class DeepgramSTTService:
                 language=lang,
                 smart_format=True,
                 punctuate=True,
+                utterances=True,
             )
             response = self.client.listen.rest.v("1").transcribe_file(
                 source,
@@ -59,8 +60,8 @@ class DeepgramSTTService:
                 timeout=httpx.Timeout(300.0, connect=10.0),
             )
 
-        words: List[Dict[str, Any]] = []
         transcript_parts: List[str] = []
+        sentences: List[Dict[str, Any]] = []
 
         # SDK may return dict or object
         if hasattr(response, "to_dict"):
@@ -75,28 +76,30 @@ class DeepgramSTTService:
             channels = results.get("channels") or []
             if not channels:
                 logger.warning("Deepgram returned no channels")
-                return {"words": [], "transcript": ""}
+                return {"transcript": "", "sentences": []}
             channel = channels[0]
             alts = channel.get("alternatives") or []
             if not alts:
                 logger.warning("Deepgram returned no alternatives")
-                return {"words": [], "transcript": ""}
+                return {"transcript": "", "sentences": []}
             alt = alts[0]
             transcript_parts.append(alt.get("transcript") or "")
-            for w in alt.get("words") or []:
-                words.append({
-                    "word": w.get("word", ""),
-                    "startSeconds": float(w.get("start", 0.0)),
-                    "endSeconds": float(w.get("end", 0.0)),
+
+            # Utterances = sentence/phrase segments (when utterances=True)
+            for ut in results.get("utterances") or []:
+                sentences.append({
+                    "startSeconds": float(ut.get("start", 0.0)),
+                    "endSeconds": float(ut.get("end", 0.0)),
+                    "text": (ut.get("transcript") or "").strip(),
                 })
         except (KeyError, IndexError, TypeError) as e:
             logger.error("Deepgram response parse error: %s", e)
             raise
 
         transcript = " ".join(transcript_parts).strip()
-        logger.info("Deepgram STT completed: %d words", len(words))
+        logger.info("Deepgram STT completed: %d sentences", len(sentences))
 
         return {
-            "words": words,
             "transcript": transcript,
+            "sentences": sentences,
         }

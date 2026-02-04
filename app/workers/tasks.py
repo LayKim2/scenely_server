@@ -15,7 +15,6 @@ from app.core.models import (
     JobResult,
     JobStatus,
     MediaSource,
-    ScriptExport,
     SourceType,
 )
 from app.services.ffmpeg_service import (
@@ -110,23 +109,7 @@ def process_job(self, job_id: str):
             language_code=job.target_lang or "en-US",
         )
         transcript_text = stt_result.get("transcript", "") or ""
-        words = stt_result.get("words", []) or []
-        logger.info(
-            "Job %s: STT done — words=%s, transcript_len=%s",
-            job_id, len(words), len(transcript_text),
-        )
-
-        # Save word-level script to script_exports
-        for idx, w in enumerate(words):
-            db.add(ScriptExport(
-                job_id=job_id,
-                idx=idx,
-                word=w.get("word", ""),
-                start_sec=float(w.get("startSeconds", 0.0) or 0.0),
-                end_sec=float(w.get("endSeconds", 0.0) or 0.0),
-            ))
-        db.commit()
-        logger.info("Saved %d words to script_exports for job %s", len(words), job_id)
+        logger.info("Job %s: STT done — transcript_len=%s", job_id, len(transcript_text))
 
         # Step 4: Gemini segment analysis (transcript -> segments)
         logger.info("Processing job %s: Gemini analysis & selection", job_id)

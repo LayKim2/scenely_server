@@ -33,13 +33,17 @@ class GoogleSTTService:
         if not self.gcs_bucket:
             raise RuntimeError("GCS_BUCKET is not configured in settings.")
 
+        size_bytes = os.path.getsize(local_path) if os.path.exists(local_path) else 0
         bucket = self.storage_client.bucket(self.gcs_bucket)
-        # Use a stable prefix for STT audio; include random suffix to avoid collisions
         blob_name = f"stt-audio/{uuid.uuid4()}_{os.path.basename(local_path)}"
         blob = bucket.blob(blob_name)
 
-        logger.info("Uploading audio to GCS bucket=%s key=%s", self.gcs_bucket, blob_name)
+        logger.info(
+            "STT: uploading to GCS bucket=%s key=%s size_bytes=%s",
+            self.gcs_bucket, blob_name, size_bytes,
+        )
         blob.upload_from_filename(local_path)
+        logger.info("STT: GCS upload done, uri=gs://%s/%s", self.gcs_bucket, blob_name)
 
         return f"gs://{self.gcs_bucket}/{blob_name}"
 
@@ -61,10 +65,15 @@ class GoogleSTTService:
                 enable_automatic_punctuation=True,
             )
 
-            logger.info("Requesting Google STT (long_running_recognize) for %s", gcs_uri)
+            logger.info("STT: calling long_running_recognize uri=%s language=%s", gcs_uri, language_code)
             operation = self.client.long_running_recognize(config=config, audio=audio)
-            logger.info("Waiting for Speech-to-Text result (may take several minutes for long audio)...")
+            op_name = getattr(operation, "name", None) or "?"
+            logger.info(
+                "STT: request submitted, operation.name=%s — waiting up to 1800s for result...",
+                op_name,
+            )
             response = operation.result(timeout=1800)  # 30 minutes for long files
+            logger.info("STT: operation.result() returned successfully")
 
             words: List[Dict[str, Any]] = []
             full_transcript: List[str] = []

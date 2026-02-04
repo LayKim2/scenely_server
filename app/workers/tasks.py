@@ -96,7 +96,11 @@ def process_job(self, job_id: str):
         db.commit()
 
         # Step 3: STT transcription (audio -> text); can take several minutes for long audio
-        logger.info("Processing job %s: STT transcription (upload to GCS, then long_running_recognize)", job_id)
+        audio_size = os.path.getsize(temp_audio_path) if os.path.exists(temp_audio_path) else 0
+        logger.info(
+            "Job %s: entering ASR_RUNNING — STT start, path=%s, size_bytes=%s, language=%s",
+            job_id, temp_audio_path, audio_size, job.target_lang or "en-US",
+        )
         job.status = JobStatus.ASR_RUNNING
         job.progress = 0.35
         db.commit()
@@ -107,6 +111,10 @@ def process_job(self, job_id: str):
         )
         transcript_text = stt_result.get("transcript", "") or ""
         words = stt_result.get("words", []) or []
+        logger.info(
+            "Job %s: STT done — words=%s, transcript_len=%s",
+            job_id, len(words), len(transcript_text),
+        )
 
         # Save word-level script to script_exports
         for idx, w in enumerate(words):

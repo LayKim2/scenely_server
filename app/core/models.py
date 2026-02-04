@@ -131,6 +131,7 @@ class Job(Base):
     media_source = relationship("MediaSource", back_populates="jobs")
     job_result_meta = relationship("JobResult", back_populates="job", uselist=False)
     script_exports = relationship("ScriptExport", back_populates="job", cascade="all, delete-orphan")
+    transcript_sentences = relationship("TranscriptSentence", back_populates="job", cascade="all, delete-orphan")
 
 
 class JobResult(Base):
@@ -142,7 +143,8 @@ class JobResult(Base):
     job_id = Column(String, ForeignKey("jobs.id"), unique=True, nullable=False)
     result_type = Column(String, nullable=False, default="DAILY_LESSON_V1")
     language = Column(String, nullable=True)
-    full_text = Column(Text, nullable=True)  # Concatenated transcript text
+    full_text = Column(Text, nullable=True)  # Concatenated transcript text (e.g. from Gemini segments)
+    raw_transcript = Column(Text, nullable=True)  # Full STT transcript (entire script)
     summary = Column(Text, nullable=True)  # From Gemini analysis
     difficulty = Column(String, nullable=True)  # e.g. A2, B1
     situation = Column(String, nullable=True)  # e.g. 비즈니스, 일상
@@ -186,6 +188,22 @@ class AnalysisSegmentVoca(Base):
     segment = relationship("AnalysisSegment", back_populates="voca")
 
 
+class TranscriptSentence(Base):
+    """Sentence/utterance-level STT result (e.g. Deepgram utterances)."""
+
+    __tablename__ = "transcript_sentences"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
+    idx = Column(Integer, nullable=False)
+    start_sec = Column(Float, nullable=False)
+    end_sec = Column(Float, nullable=False)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    job = relationship("Job", back_populates="transcript_sentences")
+
+
 class ScriptExport(Base):
     """Word-level script export for a job (STT result)."""
 
@@ -199,4 +217,4 @@ class ScriptExport(Base):
     end_sec = Column(Float, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    job = relationship("Job")
+    job = relationship("Job", back_populates="script_exports")

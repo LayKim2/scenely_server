@@ -1,4 +1,8 @@
-"""Deepgram STT service (nova-2). Same interface as Google STT for drop-in replacement."""
+"""Deepgram STT: pre-recorded file transcription (문장별 + 전체 스크립트).
+
+Flux(https://developers.deepgram.com/docs/flux/quickstart)는 실시간 스트리밍용(/v2/listen WebSocket)이라
+업로드 파일 배치 처리에는 사용하지 않음. 파일 STT는 Pre-Recorded API(v1, nova-2) + utterances 사용.
+"""
 
 import logging
 from typing import Any, Dict, List
@@ -12,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class DeepgramSTTService:
-    """Speech-to-Text via Deepgram Nova-2. Returns words + transcript like Google STT."""
+    """Pre-recorded file STT (Nova-2). Returns full transcript + sentence list only."""
 
     def __init__(self):
         self.api_key = settings.DEEPGRAM_API_KEY
@@ -28,25 +32,24 @@ class DeepgramSTTService:
 
     def transcribe_segment(self, local_path: str, language_code: str = "en-US") -> Dict[str, Any]:
         """
-        Transcribe audio file with Nova-2. Returns:
-        { "transcript": "...", "sentences": [{ startSeconds, endSeconds, text }, ...] }
+        Transcribe audio file (Pre-Recorded API). Returns:
+        {
+          "transcript": "...",   # 전체 스크립트
+          "sentences": [{ startSeconds, endSeconds, text }, ...]  # 문장별
+        }
         """
         if not self.api_key:
             raise RuntimeError("DEEPGRAM_API_KEY is not configured in settings.")
 
         logger.info(
-            "STT (Deepgram nova-2): transcribe path=%s language=%s",
+            "STT (Deepgram pre-recorded nova-2): path=%s language=%s",
             local_path,
             language_code,
         )
 
         with open(local_path, "rb") as audio:
             source = {"buffer": audio}
-            # Deepgram expects hyphenated codes (en-US, ko-KR), not underscore
-            lang = (language_code or "en").strip()
-            if not lang:
-                lang = "en"
-
+            lang = (language_code or "en").strip() or "en"
             options = PrerecordedOptions(
                 model="nova-2",
                 language=lang,
@@ -63,7 +66,6 @@ class DeepgramSTTService:
         transcript_parts: List[str] = []
         sentences: List[Dict[str, Any]] = []
 
-        # SDK may return dict or object
         if hasattr(response, "to_dict"):
             data = response.to_dict()
         elif isinstance(response, dict):
@@ -85,7 +87,6 @@ class DeepgramSTTService:
             alt = alts[0]
             transcript_parts.append(alt.get("transcript") or "")
 
-            # Utterances = sentence/phrase segments (when utterances=True)
             for ut in results.get("utterances") or []:
                 sentences.append({
                     "startSeconds": float(ut.get("start", 0.0)),

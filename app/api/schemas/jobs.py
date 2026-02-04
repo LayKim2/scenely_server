@@ -66,4 +66,5 @@ class JobResultResponse(BaseModel):
     """Response schema for job result"""
     analysis: Optional[Any] = None
     dailyLesson: List[DailyLessonItem]
-    transcriptWords: Optional[List[TranscriptWord]] = None
+    fullTranscript: Optional[str] = None
+    transcriptSentences: Optional[List[TranscriptSegment]] = None

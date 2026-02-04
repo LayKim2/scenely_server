@@ -16,6 +16,7 @@ from app.core.models import (
     JobStatus,
     JobType,
     MediaSource,
+    TranscriptSentence,
     User,
 )
 from app.api.schemas.jobs import (
@@ -25,6 +26,7 @@ from app.api.schemas.jobs import (
     JobResultResponse,
     JobStatusResponse,
     JobSummary,
+    TranscriptSegment,
 )
 from app.workers.tasks import process_job
 
@@ -43,7 +45,7 @@ def _ensure_job_owner(job: Job, current_user: User) -> None:
 
 
 def _build_job_result_response(job: Job, db: Session):
-    """Build dailyLesson + transcriptWords response from job_result and analysis_segments."""
+    """Build dailyLesson + fullTranscript + transcriptSentences from job_result and analysis_segments."""
     if job.status != JobStatus.COMPLETED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -96,9 +98,23 @@ def _build_job_result_response(job: Job, db: Session):
             )
         )
 
+    # STT: 전체 스크립트 + 문장별
+    transcript_sentences: List[TranscriptSentence] = (
+        db.query(TranscriptSentence)
+        .filter(TranscriptSentence.job_id == job.id)
+        .order_by(TranscriptSentence.idx.asc())
+        .all()
+    )
+
     return JobResultResponse(
         dailyLesson=daily_lesson_items,
-        transcriptWords=[],
+        fullTranscript=job_result.raw_transcript,
+        transcriptSentences=[
+            TranscriptSegment(start=s.start_sec, end=s.end_sec, text=s.text)
+            for s in transcript_sentences
+        ]
+        if transcript_sentences
+        else None,
     )
 
 

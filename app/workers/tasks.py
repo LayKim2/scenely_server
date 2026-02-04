@@ -16,6 +16,7 @@ from app.core.models import (
     JobStatus,
     MediaSource,
     SourceType,
+    TranscriptSentence,
 )
 from app.services.ffmpeg_service import (
     extract_audio_from_youtube,
@@ -111,6 +112,19 @@ def process_job(self, job_id: str):
         transcript_text = stt_result.get("transcript", "") or ""
         logger.info("Job %s: STT done — transcript_len=%s", job_id, len(transcript_text))
 
+        # Persist STT: 문장별 + 전체 스크립트만 (raw_transcript는 Step 5에서 저장)
+        for idx, sent in enumerate(stt_result.get("sentences") or []):
+            db.add(
+                TranscriptSentence(
+                    job_id=job_id,
+                    idx=idx,
+                    start_sec=float(sent.get("startSeconds", 0.0)),
+                    end_sec=float(sent.get("endSeconds", 0.0)),
+                    text=(sent.get("text") or "").strip(),
+                )
+            )
+        db.commit()
+
         # Step 4: Gemini segment analysis (transcript -> segments)
         logger.info("Processing job %s: Gemini analysis & selection", job_id)
         job.status = JobStatus.GEMINI_RUNNING
@@ -164,13 +178,14 @@ def process_job(self, job_id: str):
                     example_en=vocab.get("exampleEn", ""),
                 ))
 
-        # Step 5: Persist result (meta + full_text)
+        # Step 5: Persist result (meta + full_text + raw_transcript)
         logger.info("Processing job %s: Finalizing", job_id)
         meta = JobResult(
             job_id=job_id,
             result_type="DAILY_LESSON_V2",
             language=job.target_lang or "en-US",
             full_text=full_text,
+            raw_transcript=transcript_text,
             summary=summary,
             difficulty=difficulty,
             situation=situation,

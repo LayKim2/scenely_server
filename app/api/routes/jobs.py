@@ -19,12 +19,13 @@ from app.core.models import (
     User,
 )
 from app.api.schemas.jobs import (
+    DailyLessonItem,
     JobRequest,
     JobResponse,
+    JobResultResponse,
     JobStatusResponse,
     JobSummary,
 )
-from app.api.schemas.results import DailyLessonItem
 from app.workers.tasks import process_job
 
 
@@ -81,6 +82,9 @@ def _build_job_result_response(job: Job, db: Session):
                 startSec=segment.start_sec,
                 endSec=segment.end_sec,
                 sentence=segment.sentence,
+                reason=segment.reason,
+                suggestedActivity=segment.suggested_activity,
+                clipAudioUrl=segment.clip_audio_url,
                 items=[
                     {
                         "term": v.term,
@@ -91,9 +95,6 @@ def _build_job_result_response(job: Job, db: Session):
                 ],
             )
         )
-
-    # Reuse JobResultResponse schema via results module to avoid circular import.
-    from app.api.schemas.jobs import JobResultResponse  # local import to break cycle
 
     return JobResultResponse(
         dailyLesson=daily_lesson_items,

@@ -95,8 +95,12 @@ def process_job(self, job_id: str):
         job.progress = 0.25
         db.commit()
 
-        # Step 3: STT transcription (audio -> text)
-        logger.info("Processing job %s: STT transcription", job_id)
+        # Step 3: STT transcription (audio -> text); can take several minutes for long audio
+        logger.info("Processing job %s: STT transcription (upload to GCS, then long_running_recognize)", job_id)
+        job.status = JobStatus.ASR_RUNNING
+        job.progress = 0.35
+        db.commit()
+
         stt_result = stt_service.transcribe_segment(
             local_path=temp_audio_path,
             language_code=job.target_lang or "en-US",

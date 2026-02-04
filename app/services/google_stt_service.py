@@ -63,7 +63,8 @@ class GoogleSTTService:
 
             logger.info("Requesting Google STT (long_running_recognize) for %s", gcs_uri)
             operation = self.client.long_running_recognize(config=config, audio=audio)
-            response = operation.result(timeout=600)  # 10 minutes timeout
+            logger.info("Waiting for Speech-to-Text result (may take several minutes for long audio)...")
+            response = operation.result(timeout=1800)  # 30 minutes for long files
 
             words: List[Dict[str, Any]] = []
             full_transcript: List[str] = []

@@ -42,6 +42,18 @@ class AuthResponse(BaseModel):
     user: AuthUserResponse
 
 
+class TokenByUserIdRequest(BaseModel):
+    """Request body for issuing access token by user id (e.g. dev/admin)."""
+
+    userId: str
+
+
+class TokenByUserIdResponse(BaseModel):
+    """Response with access token only."""
+
+    accessToken: str
+
+
 def _get_or_create_user_from_kakao(
     kakao_id: str,
     email: Optional[str],
@@ -199,4 +211,23 @@ def get_me(current_user: User = Depends(get_current_user)):
         nickname=current_user.nickname,
         profileImage=current_user.profile_image,
     )
+
+
+@router.post("/token-by-user-id", response_model=TokenByUserIdResponse)
+def get_access_token_by_user_id(
+    payload: TokenByUserIdRequest,
+    db: Session = Depends(get_db),
+):
+    """Issue an access token for the given user id. User must exist. (e.g. for dev/admin or server-side use.)"""
+    user = db.query(User).filter(User.id == payload.userId).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    token = create_access_token(
+        data={"sub": user.id},
+        expires_delta=timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
+    )
+    return TokenByUserIdResponse(accessToken=token)
 

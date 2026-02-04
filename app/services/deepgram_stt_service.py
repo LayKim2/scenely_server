@@ -42,9 +42,14 @@ class DeepgramSTTService:
 
         with open(local_path, "rb") as audio:
             source = {"buffer": audio}
+            # Deepgram expects hyphenated codes (en-US, ko-KR), not underscore
+            lang = (language_code or "en").strip()
+            if not lang:
+                lang = "en"
+
             options = PrerecordedOptions(
                 model="nova-2",
-                language=language_code.replace("-", "_") if language_code else "en",
+                language=lang,
                 smart_format=True,
                 punctuate=True,
             )

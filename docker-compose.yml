@@ -44,6 +44,7 @@ services:
       - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/scenely-gcp-key.json
+      - GCS_BUCKET=${GCS_BUCKET}
     volumes:
       - ./:/app
       - ./app/scenely-gcp-key.json:/app/scenely-gcp-key.json:ro
@@ -68,6 +69,7 @@ services:
       - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/scenely-gcp-key.json
+      - GCS_BUCKET=${GCS_BUCKET}
     volumes:
       - ./:/app
       - ./app/scenely-gcp-key.json:/app/scenely-gcp-key.json:ro

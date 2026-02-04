@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # Google Cloud STT
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None  # Path to service account JSON
+    GCS_BUCKET: Optional[str] = None  # Bucket for STT audio (gs://GCS_BUCKET/...)
 
     # Auth / JWT
     JWT_SECRET_KEY: Optional[str] = None 

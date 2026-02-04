@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     # Gemini API
     GEMINI_API_KEY: Optional[str] = None
 
-    # Google Cloud STT
+    # STT: Deepgram (primary)
+    DEEPGRAM_API_KEY: Optional[str] = None
+
+    # Google Cloud STT (legacy, optional)
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None  # Path to service account JSON
     GCS_BUCKET: Optional[str] = None  # Bucket for STT audio (gs://GCS_BUCKET/...)
 

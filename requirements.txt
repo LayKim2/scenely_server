@@ -19,6 +19,9 @@ google-genai
 google-cloud-speech==2.23.0
 google-cloud-storage
 
+# STT: Deepgram (nova-2)
+deepgram-sdk
+
 # Configuration
 pydantic==2.5.0
 pydantic-settings==2.1.0

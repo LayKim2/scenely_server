@@ -25,7 +25,7 @@ from app.services.ffmpeg_service import (
 )
 from app.services.s3_service import S3Service
 from app.services.gemini_service import GeminiService
-from app.services.google_stt_service import GoogleSTTService
+from app.services.deepgram_stt_service import DeepgramSTTService
 from app.utils.file_cleanup import cleanup_temp_files
 from app.config import settings
 
@@ -53,7 +53,7 @@ def process_job(self, job_id: str):
 
         s3_service = S3Service()
         gemini_service = GeminiService()
-        stt_service = GoogleSTTService()
+        stt_service = DeepgramSTTService()
 
         # Step 1: Validate
         logger.info("Processing job %s: Validation", job_id)
